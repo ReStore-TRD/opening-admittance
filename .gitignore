@@ -1,0 +1,8 @@
+.idea
+.vscode
+__pycache__
+token.json
+credentials.json
+# data files may contain sensitive information
+data/*.*
+output/*.*
