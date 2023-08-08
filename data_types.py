@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from itertools import permutations
@@ -88,13 +87,13 @@ class Registration(Person):
 @dataclass(frozen=True)
 class ProtoTimeslot:
     name: str
-    slots: int = 0
+    capacity: int = 0
     unlimited: bool = False
 
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
-            data["name"], int(data["slots"]), data["unlimited"].lower() == "true"
+            data["name"], int(data["capacity"]), data["unlimited"].lower() == "true"
         )
 
 

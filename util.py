@@ -18,7 +18,15 @@ def get_credentials(scopes: List[str]) -> Credentials:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", scopes)
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    "credentials.json", scopes
+                )
+            except FileNotFoundError:
+                print(
+                    "Could not find 'credentials.json'!\nFollow this guide: https://developers.google.com/docs/api/quickstart/python"
+                )
+                exit(1)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
         with open("token.json", "w") as token:

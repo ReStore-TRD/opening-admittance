@@ -2,11 +2,11 @@ from __future__ import print_function
 
 import json
 import os.path
+import random
 from typing import Type, Dict, List
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -27,7 +27,7 @@ from util import get_credentials
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # The ID and range of a sample spreadsheet.
-SPREADSHEET_ID = "1s6OUJOPaLbF4i6ZF3wPdW6Lkp5ghgbgUsEzlcj9ukWo"
+SPREADSHEET_ID = "11lzarMpjQOlPzMmPmJMQ2ZvP595tWl3LVfWouxALWCA"
 SAMPLE_RANGE_NAME = "Responses!A1:Z"
 
 
@@ -56,7 +56,14 @@ def main():
         print(err)
         exit(1)
 
-    registrations_data = raw_sheets["Responses"].get("values", [])
+    # Read and bind Responses columns to meaningful fields
+    responses_sheet = "Responses"
+    if responses_sheet not in raw_sheets:
+        responses_sheet = open_select_sheet_dialog_window(
+            SPREADSHEET_ID, "Select 'Responses' Sheet"
+        )
+
+    registrations_data = raw_sheets[responses_sheet].get("values", [])
     headers = registrations_data.pop(0)
     data_binding = bind(headers, Registration)
     if data_binding is None:
@@ -68,43 +75,47 @@ def main():
         for row in registrations_data
     ]
 
-    # TODO: Dont have this written plainly in the program but configurable from file instead!
-    admittance_details_sheet = "Timeslot Details"
-    if admittance_details_sheet not in raw_sheets:
-        admittance_details_sheet = open_select_sheet_dialog_window(SPREADSHEET_ID)
+    # Read and bind Timeslot Details columns to meaningful fields
+    timeslot_details_sheet = "Timeslot Details"
+    if timeslot_details_sheet not in raw_sheets:
+        timeslot_details_sheet = open_select_sheet_dialog_window(
+            SPREADSHEET_ID, "Select 'Timeslot Details' Sheet"
+        )
 
-    admittance_details_data = raw_sheets[admittance_details_sheet].get("values", [])
-    headers = admittance_details_data.pop(0)
+    timeslot_details_data = raw_sheets[timeslot_details_sheet].get("values", [])
+    headers = timeslot_details_data.pop(0)
     data_binding = bind(headers, ProtoTimeslot)
 
     if data_binding is None:
         print("Binding column names with admittance details entries failed")
         exit()
 
-    admittance_details = [
+    timeslot_details = [
         ProtoTimeslot.from_dict({k: row[v] for k, v in data_binding.items()})
-        for row in admittance_details_data
+        for row in timeslot_details_data
     ]
 
     admittance = OpeningAdmittance(
         {
             timeslot.name: (
-                Timeslot() if timeslot.unlimited else LimitedTimeslot(timeslot.slots)
+                Timeslot() if timeslot.unlimited else LimitedTimeslot(timeslot.capacity)
             )
-            for timeslot in admittance_details
+            for timeslot in timeslot_details
         }
     )
 
-    admittance_confirmed_duplicates_sheet = "confirmed duplicates"
+    admittance_confirmed_duplicates_sheet = "Confirmed Duplicates"
     if admittance_confirmed_duplicates_sheet not in raw_sheets:
         admittance_confirmed_duplicates_sheet = open_select_sheet_dialog_window(
-            SPREADSHEET_ID
+            SPREADSHEET_ID, "Select 'Confirmed Duplicates' sheet"
         )
 
-    admittance_confirmed_duplicates_data = raw_sheets[
+    if admittance_confirmed_duplicates_data := raw_sheets[
         admittance_confirmed_duplicates_sheet
-    ].get("values", [])
-    headers = admittance_confirmed_duplicates_data.pop(0)
+    ].get("values", []):
+        headers = admittance_confirmed_duplicates_data.pop(0)
+    else:
+        headers = Person.__init__.__code__.co_varnames[1:]
     data_binding = bind(headers, Person)
 
     if data_binding is None:
@@ -117,16 +128,18 @@ def main():
     )
     admittance.confirmed_duplicates = confirmed_duplicates
 
-    admittance_confirmed_nonworking_email_sheet = "non-working emails"
+    admittance_confirmed_nonworking_email_sheet = "Non-working Emails"
     if admittance_confirmed_nonworking_email_sheet not in raw_sheets:
         admittance_confirmed_nonworking_email_sheet = open_select_sheet_dialog_window(
-            SPREADSHEET_ID
+            SPREADSHEET_ID, "Select 'non-working emails' sheet"
         )
 
-    admittance_confirmed_nonworking_email_data = raw_sheets[
+    if admittance_confirmed_nonworking_email_data := raw_sheets[
         admittance_confirmed_nonworking_email_sheet
-    ].get("values", [])
-    headers = admittance_confirmed_nonworking_email_data.pop(0)
+    ].get("values", []):
+        headers = admittance_confirmed_nonworking_email_data.pop(0)
+    else:
+        headers = Person.__init__.__code__.co_varnames[1:]
     data_binding = bind(headers, Person)
 
     if data_binding is None:
@@ -138,6 +151,8 @@ def main():
         for row in admittance_confirmed_nonworking_email_data
     )
     admittance.confirmed_nonworking_emails = confirmed_nonworking_emails
+
+    random.shuffle(unprocessed_entries)
 
     admittance.auto_admit(unprocessed_entries)
 

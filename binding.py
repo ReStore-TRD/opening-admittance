@@ -1,7 +1,6 @@
 import json
 import os
-import tkinter as tk
-from typing import List, Dict, Type, Tuple, Optional
+from typing import List, Dict, Type
 
 from interfaces import open_column_name_binding_window
 
@@ -28,8 +27,3 @@ def verify_column_bindings(datatype: Type, column_bindings: Dict[str, int]) -> b
     # Get constructor arguments, excluding self
     args = datatype.__init__.__code__.co_varnames[1:]
     return set(args) == set(column_bindings.keys())
-
-
-
-
-
