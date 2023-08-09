@@ -18,7 +18,7 @@ def open_create_sheet_dialog_window(spreadsheetId: str) -> Optional[str]:
     sheet_name = tk.StringVar(name="sheet_name", value="")
 
     tk.Entry(dialog_window, textvariable=sheet_name, width=40).grid(row=0, column=0)
-    tk.Button(dialog_window, text="Accept", command=dialog_window.quit).grid(
+    tk.Button(dialog_window, text="Accept", command=dialog_window.destroy).grid(
         row=1, column=0, columnspan=1
     )
     dialog_window.mainloop()
@@ -35,16 +35,17 @@ def open_create_sheet_dialog_window(spreadsheetId: str) -> Optional[str]:
                 ["https://www.googleapis.com/auth/spreadsheets"]
             ),
         )
-        # Call the Sheets API
-        spreadsheet = {"properties": {"title": sheet_name.get()}}
-        spreadsheet = (
-            service.spreadsheets()
-            .create(body=spreadsheet, fields="spreadsheetId")
-            .execute()
-        )
-        return spreadsheet["properties"]["title"]
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheetId,
+            body={
+                "requests": [{"addSheet": {"properties": {"title": sheet_name.get()}}}]
+            },
+        ).execute()
+        dialog_window.destroy()
+        return sheet_name.get()
     except HttpError as e:
         warnings.warn(str(e))
+        dialog_window.destroy()
         return None
 
 
@@ -78,13 +79,14 @@ def open_select_sheet_dialog_window(
     def create_sheet():
         dialog_window.destroy()
         new_sheet_name = open_create_sheet_dialog_window(spreadsheetId)
+        print(f"Create {new_sheet_name}!")
         sheet_names.append(new_sheet_name)
         sheet_name.set(new_sheet_name)
 
     tk.OptionMenu(dialog_window, sheet_name, *sheet_names).grid(
         row=0, column=0, columnspan=2
     )
-    tk.Button(dialog_window, text="Accept", command=dialog_window.quit).grid(
+    tk.Button(dialog_window, text="Accept", command=dialog_window.destroy).grid(
         row=1, column=0
     )
     tk.Button(dialog_window, text="Create", command=create_sheet).grid(row=1, column=1)
@@ -113,7 +115,7 @@ def open_spreadsheet_dialog_window(title: str, default_value: str) -> Optional[s
     tk.Entry(dialog_window, textvariable=spreadsheet_url, width=40).grid(
         row=0, column=1, padx=(5, 10)
     )
-    tk.Button(dialog_window, text="Accept", command=dialog_window.quit).grid(
+    tk.Button(dialog_window, text="Accept", command=dialog_window.destroy).grid(
         row=1, column=0, columnspan=1
     )
     tk.Button(dialog_window, text="Cancel", command=cancel_dialog).grid(
@@ -316,7 +318,9 @@ def open_admittance_creation_window():
 
     # Create a button to accept the list and close the window
     tk.Button(
-        create_admittance_window, text="Accept", command=create_admittance_window.quit
+        create_admittance_window,
+        text="Accept",
+        command=create_admittance_window.destroy,
     ).grid(row=4, column=0, columnspan=3, sticky=tk.NSEW, padx=80, pady=10)
     # TODO: deal with the window being closed without accepting
     # create_admittance_window.protocol("WM_DELETE_WINDOW", cancel_dialog)
@@ -355,7 +359,7 @@ def open_column_name_binding_window(
             row=i, column=3
         )
 
-    tk.Button(binding_window, text="Accept", command=binding_window.quit).grid(
+    tk.Button(binding_window, text="Accept", command=binding_window.destroy).grid(
         row=len(args), column=1, columnspan=2
     )
     binding_window.mainloop()

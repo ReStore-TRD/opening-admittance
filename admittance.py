@@ -1,7 +1,8 @@
-import csv
-import os
-from collections import defaultdict
 from typing import Dict, Set, DefaultDict, List, Optional, Iterable
+from collections import defaultdict
+import os
+import random
+import csv
 
 from googleapiclient.discovery import build
 
@@ -72,6 +73,7 @@ class OpeningAdmittance:
             for ending in bad_email_endings:
                 if registration.person.email.endswith(ending):
                     self.marked[registration.person].append(
+                        f"[NEEDS CONFIRMATION] (This is tricky to confirm before sending out the email{', could be PHD...' if ending == '@ntnu.no' else ''} unless obviously wrong.)\n"
                         f"Likely a non-working email! It ends with '{ending}'."
                     )
 
@@ -131,6 +133,7 @@ class OpeningAdmittance:
                 ):
                     # NOTE: changing your timeslots has its drawback - you're now later in the queue
                     reason = (
+                        "[DONE] Script has matched these entries to be identical, nothing more needs to be done!\n"
                         f"Duplicate Entry for {person}:\noverwriting {proccessed_for_admission[person]}...\n"
                         f"timestamp changed from {proccessed_for_admission[person].timestamp} to {registration.timestamp}\n"
                         f"changed timeslots from {proccessed_for_admission[person].timeslots} to {registration.timeslots}"
@@ -152,30 +155,40 @@ class OpeningAdmittance:
                         ):
                             # only overwrite entry if change in timeslots
                             self.marked[already_processed_person].append(
-                                f"Confirmed suspected duplicate! {registration.person} is the same as {already_processed_person}!"
+                                "[DONE] You've already confirmed this duplicate!\n"
+                                f"Manually Confirmed duplicate! {registration.person} is the same as {already_processed_person}!"
                                 f"\nOverwriting {already_processed_registration} with {registration}...\n"
                             )
                             del proccessed_for_admission[already_processed_person]
                         else:
                             self.marked[already_processed_person].append(
+                                "[NEEDS CONFIRMATION] (copy one or all entries to confirmed duplicates when/if confirmed)\n"
                                 f"Suspected duplicate of {registration}"
                             )
                             self.marked[registration.person].append(
+                                "[NEEDS CONFIRMATION] (copy one or all entries to confirmed duplicates when/if confirmed)\n"
                                 f"Suspected duplicate of {already_processed_registration}"
                             )
                             break
 
             # Evaluate if person has a confirmed non-working email
             if registration.person in self.confirmed_nonworking_email:
-                self.marked[registration.person].append("Confirmed non-working email!")
+                self.marked[registration.person].append(
+                    "[DONE] (if done before emails have been sent out, the script can run again to assign slots)\nConfirmed non-working email!"
+                )
                 continue  # go on to the next person!
 
             proccessed_for_admission[person] = registration
         return proccessed_for_admission
 
-    def auto_admit(self, registrations: Iterable[Registration]):
+    def auto_admit(
+        self, registrations: Iterable[Registration], random_admission: bool = True
+    ):
         self.processed = self._preprocess_and_mark(registrations)
-        for registration in self.processed.values():
+        processed_registrations = list(self.processed.values())
+        if random_admission:
+            random.shuffle(processed_registrations)
+        for registration in processed_registrations:
             if not any(
                 self.timeslots[wanted_slot].admit(registration)
                 for wanted_slot in registration.timeslots
@@ -227,7 +240,7 @@ class OpeningAdmittance:
                 entry["marked reason"] = reason
                 writer.writerow(entry)
 
-    def write_to_spreadsheet(self, spreadsheetId: str):
+    def write_to_spreadsheet(self, spreadsheetId: str, only_preprocess: bool = True):
         service = build(
             "sheets",
             "v4",
@@ -242,67 +255,75 @@ class OpeningAdmittance:
         sheets = sheet_metadata.get("sheets", "")
         sheet_names = [sheet.get("properties", {}).get("title", "") for sheet in sheets]
 
-        for name, timeslot in self.timeslots.items():
-            if not timeslot.spots:  # No one is attending this timeslot
-                continue
-            # check if spreadsheet with name exists
-            if name in sheet_names:
-                # clear sheet
-                sheet.values().clear(
-                    spreadsheetId=spreadsheetId, range=f"{name}!A1:Z"
-                ).execute()
-            else:
-                # create sheet
-                sheet.batchUpdate(
+        if not only_preprocess:
+            # write to timeslots
+            for name, timeslot in self.timeslots.items():
+                if not timeslot.spots:  # No one is attending this timeslot
+                    continue
+                # check if spreadsheet with name exists
+                if name in sheet_names:
+                    # clear sheet
+                    sheet.values().clear(
+                        spreadsheetId=spreadsheetId, range=f"{name}!A1:Z"
+                    ).execute()
+                else:
+                    # create sheet
+                    sheet.batchUpdate(
+                        spreadsheetId=spreadsheetId,
+                        body={
+                            "requests": [{"addSheet": {"properties": {"title": name}}}]
+                        },
+                    ).execute()
+                    sheet_names.append(name)
+
+                # write to sheet
+                fields = list(timeslot.spots[0].__dict__.keys())
+                values = [fields]
+                for registration in timeslot.spots:
+                    values.append(
+                        [str(getattr(registration, field)) for field in fields]
+                    )
+                body = {"values": values}
+                sheet.values().update(
                     spreadsheetId=spreadsheetId,
-                    body={"requests": [{"addSheet": {"properties": {"title": name}}}]},
+                    range=f"{name}!A1:Z",
+                    valueInputOption="USER_ENTERED",
+                    body=body,
                 ).execute()
-                sheet_names.append(name)
 
-            # write to sheet
-            fields = list(timeslot.spots[0].__dict__.keys())
-            values = [fields]
-            for registration in timeslot.spots:
-                values.append([str(getattr(registration, field)) for field in fields])
-            body = {"values": values}
-            sheet.values().update(
-                spreadsheetId=spreadsheetId,
-                range=f"{name}!A1:Z",
-                valueInputOption="USER_ENTERED",
-                body=body,
-            ).execute()
+            # write to waiting list sheet
+            if self.waiting_list:
+                # create or clear waiting list sheet
+                if "waiting_list" in sheet_names:
+                    # clear sheet
+                    sheet.values().clear(
+                        spreadsheetId=spreadsheetId, range=f"waiting_list!A1:Z"
+                    ).execute()
+                else:
+                    # create sheet
+                    sheet.batchUpdate(
+                        spreadsheetId=spreadsheetId,
+                        body={
+                            "requests": [
+                                {"addSheet": {"properties": {"title": "waiting_list"}}}
+                            ]
+                        },
+                    ).execute()
+                    sheet_names.append("waiting_list")
 
-        # write to waiting list sheet
-        if self.waiting_list:
-            # create or clear waiting list sheet
-            if "waiting_list" in sheet_names:
-                # clear sheet
-                sheet.values().clear(
-                    spreadsheetId=spreadsheetId, range=f"waiting_list!A1:Z"
-                ).execute()
-            else:
-                # create sheet
-                sheet.batchUpdate(
+                fields = list(self.waiting_list[0].__dict__.keys())
+                values = [fields]
+                for registration in self.waiting_list:
+                    values.append(
+                        [str(getattr(registration, field)) for field in fields]
+                    )
+                body = {"values": values}
+                sheet.values().update(
                     spreadsheetId=spreadsheetId,
-                    body={
-                        "requests": [
-                            {"addSheet": {"properties": {"title": "waiting_list"}}}
-                        ]
-                    },
+                    range=f"waiting_list!A1:Z",
+                    valueInputOption="USER_ENTERED",
+                    body=body,
                 ).execute()
-                sheet_names.append("waiting_list")
-
-            fields = list(self.waiting_list[0].__dict__.keys())
-            values = [fields]
-            for registration in self.waiting_list:
-                values.append([str(getattr(registration, field)) for field in fields])
-            body = {"values": values}
-            sheet.values().update(
-                spreadsheetId=spreadsheetId,
-                range=f"waiting_list!A1:Z",
-                valueInputOption="USER_ENTERED",
-                body=body,
-            ).execute()
 
         # write to marked sheet
         if self.marked:
