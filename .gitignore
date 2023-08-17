@@ -2,8 +2,9 @@
 .vscode
 __pycache__
 venv/
+bindings/
+# data files may contain sensitive information
+data/
+output/
 token.json
 credentials.json
-# data files may contain sensitive information
-data/*.*
-output/*.*

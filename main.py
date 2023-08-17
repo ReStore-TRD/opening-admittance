@@ -1,169 +1,179 @@
 from __future__ import print_function
 
-import sys
-from typing import Type, Dict, List
+import argparse
+from typing import Type, Dict, List, Union
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from google.auth import load_credentials_from_file
 
 from admittance import OpeningAdmittance
 from data_types import Person, Registration, ProtoTimeslot, LimitedTimeslot, Timeslot
 from binding import bind
 from interfaces import open_select_sheet_dialog_window
 
-import re
-
 # If modifying these scopes, delete the file token.json.
 from util import get_credentials
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
+class AdmittanceSystem:
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    admittance: OpeningAdmittance
+    spreadsheet_id: str
 
-def fetch_raw_sheets(sid: str) -> Dict:
-    raw_sheets = {}
-    try:
-        service = build("sheets", "v4", credentials=get_credentials(SCOPES))
+    def __init__(self, spreadsheet_id: str):
+        self.spreadsheet_id = spreadsheet_id
+        self.setup_spreadsheet_connections()
 
-        # Call the Sheets API
-        spreadsheets = service.spreadsheets()
-        sheet_metadata = spreadsheets.get(spreadsheetId=sid).execute()
-        sheets = sheet_metadata.get("sheets", "")
+    def setup_spreadsheet_connections(self):
+        raw_sheets = {}
+        try:
+            service = build('sheets', 'v4', credentials=get_credentials(self.SCOPES))
 
-        for sheet in sheets:
-            sheet_title = sheet.get("properties", {}).get("title", "Unnamed Sheet")
-            sheet_id = sheet.get("properties", {}).get("sheetId", 0)
-            print("Sheet title: {0}, Sheet ID: {1}".format(sheet_title, sheet_id))
-            raw_sheets[sheet_title] = (
-                spreadsheets.values()
-                .get(spreadsheetId=sid, range=f"{sheet_title}!A1:Z")
-                .execute()
-            )
-        return raw_sheets
+            # Call the Sheets API
+            spreadsheets = service.spreadsheets()
+            sheet_metadata = spreadsheets.get(spreadsheetId=self.spreadsheet_id).execute()
+            sheets = sheet_metadata.get('sheets', '')
 
-    except HttpError as err:
-        print(err)
-        exit(1)
+            for sheet in sheets:
+                sheet_title = sheet.get("properties", {}).get("title", "Unnamed Sheet")
+                sheet_id = sheet.get("properties", {}).get("sheetId", 0)
+                print('Sheet title: {0}, Sheet ID: {1}'.format(sheet_title, sheet_id))
+                raw_sheets[sheet_title] = spreadsheets.values().get(spreadsheetId=self.spreadsheet_id,
+                                                                    range=f"{sheet_title}!A1:Z").execute()
 
+        except HttpError as err:
+            print(err)
+            exit(1)
 
-def main(spreadsheet_id: str, only_preprocess: bool):
-    raw_sheets = fetch_raw_sheets(spreadsheet_id)
+        def get_data_from_sheet(datatype: Type, sheet_name=None, promote_func=None):
+            if sheet_name not in raw_sheets:
+                sheet_name = open_select_sheet_dialog_window(self.spreadsheet_id, sheet_name)
 
-    # Read and bind Responses columns to meaningful fields
-    responses_sheet = "Responses"
-    if responses_sheet not in raw_sheets:
-        responses_sheet = open_select_sheet_dialog_window(
-            spreadsheet_id, "Select 'Responses' Sheet"
-        )
-        # TODO: check to see if need to refetch raw_sheets
+            data = raw_sheets[sheet_name].get("values", [])
+            headers = data.pop(0)
+            data_binding = bind(headers, datatype)
+            if data_binding is None:
+                print(f"binding column names with {datatype.__name__} failed")
+                exit()
 
-    registrations_data = raw_sheets[responses_sheet].get("values", [])
-    headers = registrations_data.pop(0)
-    data_binding = bind(headers, Registration)
-    if data_binding is None:
-        print("Binding column names with registration entries failed")
-        exit()
+            return [promote_func({k: row[v] for k, v in data_binding.items()}) for row in data]
 
-    unprocessed_entries = [
-        Registration.from_dict({k: row[v] for k, v in data_binding.items()})
-        for row in registrations_data
-    ]
+        # TODO: Dont have sheet names plainly in the program but configurable from file instead!
+        raw_registrations = get_data_from_sheet(Registration, "Responses", Registration.from_dict)
+        opening_details = get_data_from_sheet(ProtoTimeslot, "Timeslot Details", ProtoTimeslot.from_dict)
 
-    # Read and bind Timeslot Details columns to meaningful fields
-    timeslot_details_sheet = "Timeslot Details"
-    if timeslot_details_sheet not in raw_sheets:
-        timeslot_details_sheet = open_select_sheet_dialog_window(
-            spreadsheet_id, "Select 'Timeslot Details' Sheet"
+        self.admittance = OpeningAdmittance(
+            timeslots={
+                timeslot.name: (Timeslot() if timeslot.unlimited else LimitedTimeslot(timeslot.slots))
+                for timeslot in opening_details
+            },
+            registrations=raw_registrations
         )
 
-    timeslot_details_data = raw_sheets[timeslot_details_sheet].get("values", [])
-    headers = timeslot_details_data.pop(0)
-    data_binding = bind(headers, ProtoTimeslot)
+        self.admittance.confirmed_duplicates = set(get_data_from_sheet(Person, "Manually Confirmed Duplicates", Person.from_dict))
+        self.admittance.confirmed_nonworking_emails = set(get_data_from_sheet(Person, "Confirmed Faulty Emails", Person.from_dict))
+        self.admittance.banned = set(get_data_from_sheet(Person, "Ban List", Person.from_dict))
 
-    if data_binding is None:
-        print("Binding column names with admittance details entries failed")
-        exit()
+        downprioritised = get_data_from_sheet(Person, "Downprioritised", Person.from_dict)
 
-    timeslot_details = [
-        ProtoTimeslot.from_dict({k: row[v] for k, v in data_binding.items()})
-        for row in timeslot_details_data
-    ]
-
-    admittance = OpeningAdmittance(
-        {
-            timeslot.name: (
-                Timeslot() if timeslot.unlimited else LimitedTimeslot(timeslot.capacity)
-            )
-            for timeslot in timeslot_details
-        }
-    )
-
-    # Read Confirmed Duplicates
-    admittance_confirmed_duplicates_sheet = "Confirmed Duplicates"
-    if admittance_confirmed_duplicates_sheet not in raw_sheets:
-        admittance_confirmed_duplicates_sheet = open_select_sheet_dialog_window(
-            spreadsheet_id, "Select 'Confirmed Duplicates' sheet"
-        )
-        if admittance_confirmed_duplicates_sheet not in raw_sheets:
-            raw_sheets = fetch_raw_sheets(spreadsheet_id)
-
-    if admittance_confirmed_duplicates_data := raw_sheets[
-        admittance_confirmed_duplicates_sheet
-    ].get("values"):
-        headers = admittance_confirmed_duplicates_data.pop(0)
-        data_binding = bind(headers, Person)
-
-        if data_binding is None:
-            print("Binding column names with confirmed duplicates entries failed")
-            exit()
-
-        confirmed_duplicates = set(
-            Person.from_dict({k: row[v] for k, v in data_binding.items()})
-            for row in admittance_confirmed_duplicates_data
-        )
-        admittance.confirmed_duplicates = confirmed_duplicates
-
-    # Read Non-working emails
-    admittance_confirmed_nonworking_email_sheet = "Non-working Emails"
-    if admittance_confirmed_nonworking_email_sheet not in raw_sheets:
-        admittance_confirmed_nonworking_email_sheet = open_select_sheet_dialog_window(
-            spreadsheet_id, "Select 'non-working emails' sheet"
-        )
-        if admittance_confirmed_nonworking_email_sheet not in raw_sheets:
-            raw_sheets = fetch_raw_sheets(spreadsheet_id)
-
-    if admittance_confirmed_nonworking_email_data := raw_sheets[
-        admittance_confirmed_nonworking_email_sheet
-    ].get("values"):
-        headers = admittance_confirmed_nonworking_email_data.pop(0)
-        data_binding = bind(headers, Person)
-
-        if data_binding is None:
-            print("Binding column names with confirmed duplicates entries failed")
-            exit()
-
-        confirmed_nonworking_emails = set(
-            Person.from_dict({k: row[v] for k, v in data_binding.items()})
-            for row in admittance_confirmed_nonworking_email_data
-        )
-        admittance.confirmed_nonworking_emails = confirmed_nonworking_emails
-
-    # Admit everyone
-    admittance.auto_admit(unprocessed_entries)
-
-    admittance.write_to_spreadsheet(spreadsheet_id, only_preprocess)
+        for timeslot in self.admittance.timeslots.keys():
+            self.admittance.timeslots[timeslot].disallowed = set(downprioritised)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(
-            f"Wrong number of arguments, expected 1 got {len(sys.argv) - 1}: {sys.argv[1:]}"
-            "Spreadsheet ID not provided!"
-        )
-        exit()
-    if len(sys.argv) > 3:
-        f"Wrong number of arguments, expected 1 got {len(sys.argv) - 1}: {sys.argv[1:]}"
-        exit()
-    run_fully = len(sys.argv) == 3 and sys.argv[2].lower() == "doit"
-    main(sys.argv[1], not run_fully)
+#    def do_stuff(self):
+#        try:
+#            service = build('sheets', 'v4', credentials=get_credentials(self.SCOPES))
+#
+#            # Call the Sheets API
+#            spreadsheets = service.spreadsheets()
+#            sheet_metadata = spreadsheets.get(spreadsheetId=self.spreadsheet_id).execute()
+#            sheets = sheet_metadata.get('sheets', '')
+#
+#            for sheet in sheets:
+#                sheet_title = sheet.get("properties", {}).get("title", "Unnamed Sheet")
+#                sheet_id = sheet.get("properties", {}).get("sheetId", 0)
+#                print('Sheet title: {0}, Sheet ID: {1}'.format(sheet_title, sheet_id))
+#                raw_sheets[sheet_title] = spreadsheets.values().get(spreadsheetId=self.spreadsheet_id,
+#                                                                    range=f"{sheet_title}!A1:Z").execute()
+#
+#        except HttpError as err:
+#            print(err)
+#            exit(1)
+
+    def pre_process(self):
+        """
+        Go through registrations and look for duplicate entries,
+        emails we suspect will not work etc. Adding people to the Confirmed Duplicates sheet will move their
+        latest duplicate into the system for use. This makes it so that the latter entry is the correct one
+        if the duplicate was made to correct any errors in their info.
+        Additionally, it lets us remove people who tries to abuse the system by having multiple entires added.
+        :return:
+        """
+        self.admittance.preprocess()
+        self.admittance.write_to_spreadsheet(self.spreadsheet_id, write_timeslots=False)
+
+    def auto_admit(self):
+        """
+        Move all registrations into timeslots and waiting lists for said timeslots
+        :return:
+        """
+        while (response := input("Run AutoAdmit? Type 'yes'/'no'\n")) not in ['yes', 'no']:
+            pass
+
+        if response == 'yes':
+            self.admittance.preprocess()
+            self.admittance.auto_admit()
+            self.admittance.write_to_spreadsheet(self.spreadsheet_id, write_timeslots=True, write_marked=True)
+
+    def admit_waiting_list(self):
+        """
+        Remove registrations that have been cancelled from timeslots and waiting lists.
+        Remove registrations that have been confirmed as having non-working email addresses
+            from timeslots and waiting lists.
+        Remove registrations that have been confirmed as duplicates from timeslots and waiting lists.
+            (Doing this before auto_admit by running pre_process is ideal!!!)
+
+        Pick out the appropriate number of people from the waiting lists and add them to the
+            appropriate timeslot.
+        :return:
+        """
+        # TODO: Warn if non-confirmed duplicates or non-confirmed non-working emails remain by doing preprocess again
+        self.admittance.preprocess()
+
+    def data_processing(self):
+        """
+        Process data given by registrations
+
+        :return:
+        """
+
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title="modes", description="modes", help="help", required=True)
+    pp_parser = subparsers.add_parser('pp', description="pre process registrations")
+    aa_parser = subparsers.add_parser('aa', description="auto-admit registrations")
+    cr_parser = subparsers.add_parser('dp', description="data processing registrations")
+    pp_parser.set_defaults(run_mode=lambda system: system.pre_process())
+    aa_parser.set_defaults(run_mode=lambda system: system.auto_admit())
+    cr_parser.set_defaults(run_mode=lambda system: system.cr())
+
+    args = parser.parse_args()
+
+    admittance_system = AdmittanceSystem(SPREADSHEET_ID)
+    args.run_mode(admittance_system)
+
+
+# The ID and range of a sample spreadsheet.
+SPREADSHEET_ID = '1tRqpdTY2rr5oTotzyg4bONmMsl2G4QKVUnvenzsxbsw'
+#SPREADSHEET_ID = '1jPMY9sDQtaf68Se0Un6VRzi-ntUNQVtFkbfuCCc51RM'
+if __name__ == '__main__':
+    #creds, project = get_credentials(['https://www.googleapis.com/auth/spreadsheets'])
+
+    #print(project, creds)
+    #main()
+    OpeningAdmittance.read_from_spreadsheet(SPREADSHEET_ID)
+

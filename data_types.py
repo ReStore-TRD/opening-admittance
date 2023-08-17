@@ -1,19 +1,17 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from itertools import permutations
 from typing import List, Dict, Set, DefaultDict, Optional, Union
 from datetime import datetime
 
-
 def _seq_ignore_space(c: str):
     return c in " \t\r\n"
 
-
 def _normalise(field: str) -> str:
     return field.lower().strip()
-
 
 @dataclass(frozen=True, eq=True)
 class Person:
@@ -27,9 +25,7 @@ class Person:
     def similar(self, other: Person, similarity_threshold: float = 0.9) -> bool:
         # Consider permutations of name order, last name before first name etc.
 
-        email_similarity = SequenceMatcher(
-            _seq_ignore_space, self.email, other.email
-        ).ratio()
+        email_similarity = SequenceMatcher(_seq_ignore_space, self.email, other.email).ratio()
         if email_similarity > similarity_threshold:
             return True
 
@@ -40,16 +36,11 @@ class Person:
         #       Permutations made: (Per Nordmann, Per Ola, Nordmann Per, Nordmann Ola, Ola Per, Ola Nordmann)
 
         name_similarity = 0
-        num_sub_names = len(self.name.split(" "))
+        num_sub_names = len(self.name.split(' '))
         seqm = SequenceMatcher(_seq_ignore_space, self.name)
-        for name in (
-            " ".join(name_part)
-            for name_part in permutations(other.name.split(" "), num_sub_names)
-        ):
+        for name in (' '.join(name_part) for name_part in permutations(other.name.split(' '), num_sub_names)):
             seqm.set_seq2(name)
-            if (
-                seqm.quick_ratio() < similarity_threshold
-            ):  # skip if sets of character doesn't match enough
+            if seqm.quick_ratio() < similarity_threshold:  # skip if sets of character doesn't match enough
                 continue
             if (ratio := seqm.ratio()) > name_similarity:
                 name_similarity = ratio
@@ -59,7 +50,7 @@ class Person:
 
     @classmethod
     def from_dict(cls, data: dict):
-        return cls(_normalise(data["name"]), _normalise(data["email"]))
+        return cls(_normalise(data['name']), _normalise(data['email']))
 
 
 @dataclass(frozen=True)
@@ -79,23 +70,36 @@ class Registration(Person):
         return cls(
             _normalise(data["name"]),
             _normalise(data["email"]),
-            datetime.strptime(data["timestamp"], "%d/%m/%Y %H:%M:%S"),
-            [timeslot.replace(" ", "") for timeslot in data["timeslots"].split(",")],
+            datetime.strptime(data["timestamp"], '%d/%m/%Y %H:%M:%S'),
+            [timeslot.replace(' ', '') for timeslot in data["timeslots"].split(',')]
         )
+
+
+# @dataclass(frozen=True)
+# class FullEntry:
+#     timestamp: datetime.datetime = field(compare=False)
+#     email: str
+#     research_consent: str
+#     full_name: str
+#     first_time_visiting: str
+#     referral: str
+#     time_in_ttown: str
+
 
 
 @dataclass(frozen=True)
 class ProtoTimeslot:
     name: str
-    capacity: int = 0
+    slots: int = 0
     unlimited: bool = False
 
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
-            data["name"], int(data["capacity"]), data["unlimited"].lower() == "true"
+            data["name"],
+            int(data["slots"]),
+            data["unlimited"].lower() == "true"
         )
-
 
 class Timeslot:
     spots: List[Person]
@@ -110,11 +114,11 @@ class Timeslot:
         return len(self.spots)
 
     def __str__(self):
-        content = ", ".join(f"{k}: {str(v)}" for k, v in self.__dict__.items())
+        content = ', '.join(f"{k}: {str(v)}" for k, v in self.__dict__.items())
         return f"Timeslot({content})"
 
     def __repr__(self):
-        content = ", ".join(f"{k}: {str(v)}" for k, v in self.__dict__.items())
+        content = ', '.join(f"{k}: {str(v)}" for k, v in self.__dict__.items())
         return f"Timeslot({content})"
 
     def admit(self, person: Person) -> bool:
@@ -133,10 +137,12 @@ class Timeslot:
 
 class LimitedTimeslot(Timeslot):
     capacity: int
+    waiting_list: List[Person]
 
     def __init__(self, capacity: int):
         super().__init__()
         self.capacity = capacity
+        self.waiting_list = []
 
     @property
     def spots_available(self):
@@ -148,4 +154,25 @@ class LimitedTimeslot(Timeslot):
         if self.spots_available > 0:
             self.spots.append(person)
             return True
+        self.waiting_list.append(person)
         return False
+
+
+
+
+if __name__ == '__main__':
+    a = Person("Halvor Bakken Smedås", "halvor@restore-trd.no")
+    b = Person("Halvor Bakken Smedaas", "halvor@restore-trd.no")
+    # others = [
+    #     Person("Halvor Bakken Smedås", "halvor@restore-trd.no"),
+    #     Person("Klara Schlüter", "halvor@restore-trd.no"),
+    #     Person("Bakken Smedås", "halvor@restore-trd.no"),
+    #     Person("Halvor Smedås", "halvor@restore-trd.no"),
+    #     Person("Halvor Smedås", "halvor@restore-trd.n"),
+    # ]
+    #
+    # for b in others:
+    #     if not a == b:
+    #         print("Not the same:", a, b)
+    #     if not a.similar(b):
+    #         print("Not similar:", a, b)
