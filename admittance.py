@@ -78,7 +78,7 @@ class OpeningAdmittance:
 
             # Evaluate if person has not been given a timeslot because of attending previous "premium" timeslots in
             # earlier opening
-            if all(registration.person in timeslot.disallowed for timeslot in self.timeslots.values()):
+            if all(registration.person in timeslot.downprioritised for timeslot in self.timeslots.values()):
                 self.marked[registration.person].append(
                     "[DONE]\nDown prioritised from attending the timeslot(s) they signed up for, "
                     "attended previous opening in the early slot(s)!"
@@ -88,7 +88,7 @@ class OpeningAdmittance:
             for timeslot_name, timeslot in self.timeslots.items():
                 if timeslot_name not in registration.timeslots:  # we only care if they signed this timeslot
                     continue
-                if registration.person in timeslot.disallowed:
+                if registration.person in timeslot.downprioritised:
                     self.marked[registration.person].append(
                         f"[DONE]\nDown prioritised from attending {timeslot_name} because they "
                         f"attended previous opening in the early slot(s)!"
@@ -96,7 +96,7 @@ class OpeningAdmittance:
                     break
                 else:
                     # confirmed_duplicate = False
-                    for downprioritised_person in timeslot.disallowed:
+                    for downprioritised_person in timeslot.downprioritised:
                         if downprioritised_person.similar(registration.person):
                             if confirmed_duplicate := registration.person in self.confirmed_duplicates:
                                 self.marked[registration.person].append(
@@ -104,7 +104,7 @@ class OpeningAdmittance:
                                     "attended previous opening in the early slot(s)!. confirmed duplicate"
                                     f" of: {downprioritised_person} from downprioritised list!"
                                 )
-                                timeslot.disallowed.add(registration.person)
+                                timeslot.downprioritised.add(registration.person)
                                 break
                             else:
                                 self.marked[registration.person].append(

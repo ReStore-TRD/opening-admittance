@@ -103,11 +103,11 @@ class ProtoTimeslot:
 
 class Timeslot:
     spots: List[Person]
-    disallowed: Set[Person]  # The people who are not allowed to attend this timeslot
+    downprioritised: Set[Person]  # The people who are not allowed to attend this timeslot
 
-    def __init__(self, disallowed: Optional[Set[Person]] = None):
+    def __init__(self, downprioritised: Optional[Set[Person]] = None):
         self.spots = []
-        self.disallowed = disallowed or set()
+        self.downprioritised = downprioritised or set()
 
     @property
     def spots_taken(self):
@@ -122,7 +122,7 @@ class Timeslot:
         return f"Timeslot({content})"
 
     def admit(self, person: Person) -> bool:
-        if person in self.disallowed:
+        if person in self.downprioritised:
             return False
         self.spots.append(person)
         return True
@@ -149,12 +149,13 @@ class LimitedTimeslot(Timeslot):
         return self.capacity - self.spots_taken
 
     def admit(self, person: Person) -> bool:
-        if person in self.disallowed:
+        if person in self.downprioritised:
+            self.waiting_list.append(person)
             return False
         if self.spots_available > 0:
             self.spots.append(person)
             return True
-        self.waiting_list.append(person)
+        self.waiting_list.insert(0, person)
         return False
 
 

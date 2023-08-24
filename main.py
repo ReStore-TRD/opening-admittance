@@ -79,7 +79,7 @@ class AdmittanceSystem:
         downprioritised = get_data_from_sheet(Person, "Downprioritised", Person.from_dict)
 
         for timeslot in self.admittance.timeslots.keys():
-            self.admittance.timeslots[timeslot].disallowed = set(downprioritised)
+            self.admittance.timeslots[timeslot].downprioritised = set(downprioritised)
 
 
 #    def do_stuff(self):
@@ -148,6 +148,7 @@ class AdmittanceSystem:
 
         :return:
         """
+        print("Data processing is not implemented")
 
 
 def main():
@@ -156,10 +157,10 @@ def main():
     subparsers = parser.add_subparsers(title="modes", description="modes", help="help", required=True)
     pp_parser = subparsers.add_parser('pp', description="pre process registrations")
     aa_parser = subparsers.add_parser('aa', description="auto-admit registrations")
-    cr_parser = subparsers.add_parser('dp', description="data processing registrations")
+    dp_parser = subparsers.add_parser('dp', description="data processing registrations")
     pp_parser.set_defaults(run_mode=lambda system: system.pre_process())
     aa_parser.set_defaults(run_mode=lambda system: system.auto_admit())
-    cr_parser.set_defaults(run_mode=lambda system: system.cr())
+    dp_parser.set_defaults(run_mode=lambda system: system.data_processing())
 
     args = parser.parse_args()
 
@@ -169,11 +170,10 @@ def main():
 
 # The ID and range of a sample spreadsheet.
 SPREADSHEET_ID = '1tRqpdTY2rr5oTotzyg4bONmMsl2G4QKVUnvenzsxbsw'
-#SPREADSHEET_ID = '1jPMY9sDQtaf68Se0Un6VRzi-ntUNQVtFkbfuCCc51RM'
 if __name__ == '__main__':
     #creds, project = get_credentials(['https://www.googleapis.com/auth/spreadsheets'])
 
     #print(project, creds)
-    #main()
-    OpeningAdmittance.read_from_spreadsheet(SPREADSHEET_ID)
+    main()
+    #OpeningAdmittance.read_from_spreadsheet(SPREADSHEET_ID)
 
