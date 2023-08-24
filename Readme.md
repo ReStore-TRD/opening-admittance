@@ -7,9 +7,9 @@ python main.py {pp,aa,dp}
 ```
 
 Supports three modes:
- - Pre-Processing: This will run through all entries, and look for discrepancies and look up the various info we have on registrations.
- - Auto-Admit: This will also run the pre-processing one time, and proceed to admit the registered people randomly. Taking into account downprioritised people and people in the banlist.
- - Data Processing: This is intended to be used for for example estimating how much work our drivers will have based on people's responses.
+ - `pp` Pre-Processing: This will run through all entries, and look for discrepancies and look up the various info we have on registrations.
+ - `aa` Auto-Admit: This will also run the pre-processing one time, and proceed to admit the registered people randomly. Taking into account downprioritised people and people in the banlist.
+ - `dp`Data Processing: This is intended to be used for for example estimating how much work our drivers will have based on people's responses.
 
 
 ## Setup For Use
