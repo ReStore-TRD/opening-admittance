@@ -3,7 +3,7 @@ import os
 import tkinter as tk
 from typing import List, Dict, Type, Tuple, Optional
 
-from interfaces import open_column_name_binding_window
+from interfaces_colab import column_binding_query
 
 
 def bind(headers: List[str], datatype: Type) -> Dict[str, int]:
@@ -17,7 +17,7 @@ def bind(headers: List[str], datatype: Type) -> Dict[str, int]:
         if verify_column_bindings(datatype_ctor_args, column_bindings):
             return column_bindings
 
-    column_bindings = open_column_name_binding_window(datatype_ctor_args, headers)
+    column_bindings = column_binding_query(datatype.__name__, datatype_ctor_args, headers)
     if column_bindings is None:
         return None
     with open(binding_path, "w") as f:
@@ -36,7 +36,7 @@ def bind_names(headers: List[str], target_names: List[str], binding_filename: Op
             if verify_column_bindings(target_names, column_bindings):
                 return column_bindings
 
-    column_bindings = open_column_name_binding_window(target_names, headers)
+    column_bindings = column_binding_query("fields", target_names, headers)
     if column_bindings is None:
         return None
     if binding_filename:

@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, annotations
 
 import argparse
 from typing import Type, Dict, List, Union
@@ -11,7 +11,7 @@ from google.auth import load_credentials_from_file
 from admittance import OpeningAdmittance
 from data_types import Person, Registration, ProtoTimeslot, LimitedTimeslot, Timeslot
 from binding import bind
-from interfaces import open_select_sheet_dialog_window
+from interfaces_colab import select_sheet_query
 
 # If modifying these scopes, delete the file token.json.
 from util import get_credentials
@@ -49,7 +49,7 @@ class AdmittanceSystem:
 
         def get_data_from_sheet(datatype: Type, sheet_name=None, promote_func=None):
             if sheet_name not in raw_sheets:
-                sheet_name = open_select_sheet_dialog_window(self.spreadsheet_id, sheet_name)
+                sheet_name = select_sheet_query(self.spreadsheet_id, sheet_name)
 
             data = raw_sheets[sheet_name].get("values", [])
             headers = data.pop(0)
@@ -150,10 +150,19 @@ class AdmittanceSystem:
         """
         print("Data processing is not implemented")
 
+def spreadsheet_id(raw_value: str) -> str:
+    # TODO: make more robust
+    if (id_start_pos := raw_value.find("docs.google.com/spreadsheets/d/")) != -1:
+        id_start_pos += len("docs.google.com/spreadsheets/d/")
+        # select the string from after '/d/' until we hit another '/' character
+        return raw_value[id_start_pos:].split("/")[0]
+    return raw_value
 
+# The ID and range of a sample spreadsheet.
+DEFAULT_SPREADSHEET_ID = '1Th4fyC3-LqV5u9-KIoDviUU_Bwce9TUyH9HQkhqm0NU'
 def main():
-
     parser = argparse.ArgumentParser()
+    parser.add_argument("sheet", type=spreadsheet_id, default=DEFAULT_SPREADSHEET_ID, help="Sheet ID or URL")
     subparsers = parser.add_subparsers(title="modes", description="modes", help="help", required=True)
     pp_parser = subparsers.add_parser('pp', description="pre process registrations")
     aa_parser = subparsers.add_parser('aa', description="auto-admit registrations")
@@ -163,17 +172,10 @@ def main():
     dp_parser.set_defaults(run_mode=lambda system: system.data_processing())
 
     args = parser.parse_args()
-
-    admittance_system = AdmittanceSystem(SPREADSHEET_ID)
+    print(args.sheet)
+    admittance_system = AdmittanceSystem(args.sheet)
     args.run_mode(admittance_system)
 
 
-# The ID and range of a sample spreadsheet.
-SPREADSHEET_ID = '1tRqpdTY2rr5oTotzyg4bONmMsl2G4QKVUnvenzsxbsw'
 if __name__ == '__main__':
-    #creds, project = get_credentials(['https://www.googleapis.com/auth/spreadsheets'])
-
-    #print(project, creds)
     main()
-    #OpeningAdmittance.read_from_spreadsheet(SPREADSHEET_ID)
-

@@ -23,16 +23,14 @@ Currently, the script does not provide a command line argument or UI to select w
 This system requires the Google client library for python:
 
 ```bash
-pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
+pip install -r requirements.txt
 ```
 
 ### Credentials for using Google Sheets API
 These scripts utilise the Google Sheets API.
 
-For now, the way we use it lets the script act on behalf of the 
-authenticated user. I.e: Upon running the script the first time, you'll 
-be prompted to log in, and a credentials.json and token.json file will
-be created in the working directory.
+To do so, a service account has been set up in the google cloud dashboard.
+this service account uses the `client_secret.json`, containing all details needed for it to authenticate and connect to the ReStore Volunteer Drive; thus it should not be shared outside of ReStore!
 
 ### Spreadsheet Requirements
 

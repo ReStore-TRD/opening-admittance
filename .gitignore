@@ -8,3 +8,4 @@ data/
 output/
 token.json
 credentials.json
+client_secrets.json
