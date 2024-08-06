@@ -1,3 +1,4 @@
+from pathlib import Path
 import random
 from collections import defaultdict
 from typing import Dict, Set, DefaultDict, List, Optional, Iterable, Collection
@@ -189,10 +190,11 @@ class OpeningAdmittance:
             # This is the master waiting list, with all unadmitted people
             self.waiting_list.extend(unadmitted)
 
-    def write_to_spreadsheet(self, spreadsheetId: str, write_timeslots=True, write_marked=True):
+    # TODO: Move out of OpeningAdmittance
+    def write_to_spreadsheet(self, spreadsheetId: str, client_secret_file: Path, write_timeslots=True, write_marked=True):
         print("Writing to spreadsheets...")
 
-        service = build('sheets', 'v4', credentials=get_credentials(["https://www.googleapis.com/auth/spreadsheets"]))
+        service = build('sheets', 'v4', credentials=get_credentials(["https://www.googleapis.com/auth/spreadsheets"], client_secret_file))
         sheet = service.spreadsheets()
         # create or clear sheet for each timeslot
 
@@ -313,9 +315,9 @@ class OpeningAdmittance:
             # # sheet.values().update(spreadsheetId=spreadsheetId, range=f"{name}!A1", valueInputOption="USER_ENTERED", body=body).execute()
 
     @classmethod
-    def read_from_spreadsheet(cls, spreadsheet_id: str):
+    def read_from_spreadsheet(cls, spreadsheet_id: str, client_secret_file: Path):
 
-        reader = SpreadsheetReader(spreadsheet_id, ['https://www.googleapis.com/auth/spreadsheets'])
+        reader = SpreadsheetReader(spreadsheet_id, ['https://www.googleapis.com/auth/spreadsheets'], client_secret_file)
         all_reg = reader.get_data_from_sheet(
             "Responses", ["name", "email", "location", "want_delivery"],
             lambda d: {'name': _normalise(d['name']), 'email': _normalise(d['email']), 'location': d['location'], 'want_delivery': True if "Yes" in d['want_delivery'] else False}

@@ -1,5 +1,5 @@
 import datetime
-import os.path
+from pathlib import Path
 from typing import List
 
 from google.auth.transport.requests import Request
@@ -14,10 +14,10 @@ def is_timeslot_str(s: str) -> bool:
     except ValueError:
         return False
 
-def get_credentials(scopes: List[str]) -> Credentials:
+def get_credentials(scopes: List[str], secrets_file: Path) -> Credentials:
     creds = None
-    if os.path.exists('client_secret.json'):
-        creds = Credentials.from_service_account_file('client_secret.json', scopes=scopes)
+    if secrets_file.exists():
+        creds = Credentials.from_service_account_file(str(secrets_file), scopes=scopes)
     if not creds:
         raise RuntimeError("Failed to obtain credentials for service account")
     if not creds.valid:

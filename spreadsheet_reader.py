@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Union, Type, List, Dict
 
 from googleapiclient.discovery import build
@@ -9,10 +10,10 @@ from util import get_credentials
 class SpreadsheetReader:
     raw_sheets: Dict
     spreadsheet_id: str
-
-    def __init__(self, spreadsheet_id: str, scopes: List[str]):
+    
+    def __init__(self, spreadsheet_id: str, scopes: List[str], client_secret_file: Path):
         self.spreadsheet_id = spreadsheet_id
-        self.api = build('sheets', 'v4', credentials=get_credentials(scopes)).spreadsheets()
+        self.api = build('sheets', 'v4', credentials=get_credentials(scopes, client_secret_file)).spreadsheets()
         self.raw_sheets = dict()
         metadata = self.api.get(spreadsheetId=spreadsheet_id).execute()
         sheets = metadata.get('sheets', [])

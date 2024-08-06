@@ -4,8 +4,6 @@ from typing import Type, List, Optional, Dict
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from util import get_credentials
-
 def query_option(prompt: str, choices: list[str]) -> str | None:
     print(prompt)
     print("  0) CANCEL")
@@ -25,15 +23,7 @@ def query_option(prompt: str, choices: list[str]) -> str | None:
         sheet_index = sheet_number - 1
         return choices[sheet_index]
 
-def select_sheet_query(spreadsheetId: str, title: Optional[str] = None) -> str | None:
-    try:
-        service = build('sheets', 'v4', credentials=get_credentials(["https://www.googleapis.com/auth/spreadsheets"]))
-        # Get all sheets in the spreadsheet
-        sheets = service.spreadsheets().get(spreadsheetId=spreadsheetId, fields="sheets.properties").execute()["sheets"]
-    except HttpError as e:
-        warnings.warn(e)
-        return None
-
+def select_sheet_query(sheets: dict, title: Optional[str] = None) -> str | None:
     sheet_names = [sheet["properties"]["title"] for sheet in sheets]
     return query_option(f"Select {title or 'sheet'}", sheet_names)
 
