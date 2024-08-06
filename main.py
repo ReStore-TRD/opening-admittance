@@ -48,6 +48,8 @@ class AdmittanceSystem:
 
         except HttpError as err:
             print(err)
+            if err.code == 403:
+                print("Does the service account running this script have access to the spreadsheet?", spreadsheet_id)
             exit(1)
 
         def get_data_from_sheet(datatype: Type, sheet_name=None, promote_func=None):
@@ -153,7 +155,7 @@ class AdmittanceSystem:
         """
         print("Data processing is not implemented")
 
-def spreadsheet_id(raw_value: str) -> str:
+def spreadsheet_string(raw_value: str) -> str:
     # TODO: make more robust
     if (id_start_pos := raw_value.find("docs.google.com/spreadsheets/d/")) != -1:
         id_start_pos += len("docs.google.com/spreadsheets/d/")
@@ -165,7 +167,7 @@ def spreadsheet_id(raw_value: str) -> str:
 DEFAULT_SPREADSHEET_ID = '1Th4fyC3-LqV5u9-KIoDviUU_Bwce9TUyH9HQkhqm0NU'
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("sheet", type=spreadsheet_id, default=DEFAULT_SPREADSHEET_ID, help="Sheet ID or URL")
+    parser.add_argument("sheet", type=spreadsheet_string, default=DEFAULT_SPREADSHEET_ID, help="Sheet ID or URL")
     parser.add_argument("--secret", "-s", type=Path, default=Path("client_secret.json"), help="Authentication secrets for service account")
     subparsers = parser.add_subparsers(title="modes", description="modes", help="help", required=True)
     pp_parser = subparsers.add_parser('pp', description="pre process registrations")
