@@ -9,14 +9,14 @@ python main.py {pp,aa,dp}
 Supports three modes:
  - `pp` Pre-Processing: This will run through all entries, and look for discrepancies and look up the various info we have on registrations.
  - `aa` Auto-Admit: This will also run the pre-processing one time, and proceed to admit the registered people randomly. Taking into account downprioritised people and people in the banlist.
- - `dp`Data Processing: This is intended to be used for for example estimating how much work our drivers will have based on people's responses.
+ - `dp`Data Processing: This is intended to be used for example estimating how much work our drivers will have based on people's responses.
 
 
 ## Setup For Use
 
 ### Configure for the right spreadsheet
 
-Currently, the script does not provide a command line argument or UI to select which spreadsheet it should access. Instead this is defined in `main.py` in a variable `SPREADSHEET_ID`, edit this to contain the ID of your spreadsheet. This can be found in the URL when opening the spreadsheet in Google Drive.
+Currently, the script does not provide a command line argument or UI to select which spreadsheet it should access. Instead, this is defined in `main.py` in a variable `SPREADSHEET_ID`, edit this to contain the ID of your spreadsheet. This can be found in the URL when opening the spreadsheet in Google Drive.
 
 ### Required packages
 
